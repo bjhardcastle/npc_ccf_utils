@@ -575,7 +575,7 @@ def plot_brain_heatmap(
 
 
 def plot_gdf_alt(
-    gdfs: gpd.GeoDataFrame | Iterable[gpd.GeoDataFrame], ccf_colors: bool = False
+    gdfs: gpd.GeoDataFrame | Iterable[gpd.GeoDataFrame], ccf_colors: bool = False, value_name: str = "value"
 ) -> alt.Chart:
     if isinstance(gdfs, gpd.GeoDataFrame):
         gdfs = (gdfs,)
@@ -671,6 +671,7 @@ def plot_gdf_alt(
             tooltip.append("value:Q")
             color = alt.Color(
                 "value:Q",
+                title=value_name,
                 scale=alt.Scale(scheme="viridis"),
                 legend=alt.Legend(orient="bottom", direction="horizontal"),
                 condition=condition,
@@ -713,6 +714,28 @@ def plot_gdf_alt(
                 )
             )
             chart = alt.layer(background, chart)
+            
+            null_slice =          (
+                alt.Chart(gdf.filter(pl.col('value').fill_nan(None).is_null()))
+                .mark_geoshape(
+                    strokeWidth=0.05,
+                    stroke="darkgrey",
+                )
+                .encode(
+                    tooltip=tooltip,
+                    color="darkgrey",
+
+                )
+                .project(
+                    type="identity",
+                    reflectY=projection != "sagittal",
+                    fit=get_fit(
+                        projection,
+                        is_upright if projection in ("top", "horizontal") else None,
+                    ),
+                )
+            )
+            chart = alt.layer(null_slice, chart)
 
         # add lines (positions aren't correct):
         """
