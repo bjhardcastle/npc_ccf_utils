@@ -174,7 +174,7 @@ def get_heatmap_gdf(
     redundant_parents = user_df.filter(expr)
     if len(redundant_parents):
         if remove_redundant_parents:
-            logger.warning(
+            logger.debug(
                 f"Removing {len(redundant_parents)} regions as they are parents of other regions ({remove_redundant_parents=!r}): {redundant_parents['acronym'].to_numpy()}"
             )
             user_df = user_df.filter(~expr)
@@ -655,26 +655,13 @@ def plot_gdf_alt(
                 range=ccf_utils.get_ccf_structure_tree_df()["color_hex_str"].to_list(),
             )
         else:
-            logger.warning(
-                "Color encoding for regions with no values does not work correctly"
-            )
-            use_missing_color_fix = False
-            if use_missing_color_fix:
-                gdf = gdf.copy()
-                gdf["value"] = gdf["value"].fillna("")
-                condition = alt.Undefined
-            else:
-                condition = {
-                    "test": "datum['value'] === null",
-                    "value": "#aaa",
-                }  # currently does nothing if use_fix is True (and doesn't work if False)
             tooltip.append("value:Q")
             color = alt.Color(
                 "value:Q",
                 title=value_name,
                 scale=alt.Scale(scheme="viridis"),
                 legend=alt.Legend(orient="bottom", direction="horizontal"),
-                condition=condition,
+                # condition=condition,
             )
         chart = (
             alt.Chart(gdf)
@@ -695,14 +682,37 @@ def plot_gdf_alt(
                 ),
             )
         )
+        null_slice = (
+            alt.Chart(
+                gdf[gdf["value"].isna() | gdf["value"].isnull()]
+            )
+            .mark_geoshape(
+                strokeWidth=0.05,
+                stroke="white",
+            )
+            .encode(
+                tooltip=tooltip,
+                color=alt.value("#eee"),
 
-        with_background = False
-        if with_background or not use_missing_color_fix:
+            )
+            .project(
+                type="identity",
+                reflectY=projection != "sagittal",
+                fit=get_fit(
+                    projection,
+                    is_upright if projection in ("top", "horizontal") else None,
+                ),
+            )
+        )
+        chart = alt.layer(null_slice, chart)
+
+        with_background = True
+        if with_background:
             background = (
                 alt.Chart(get_background_gdf(projection, background_position))
-                .mark_geoshape(strokeWidth=0.05, stroke="darkgrey")
+                .mark_geoshape(strokeWidth=0.2, stroke="darkgrey")
                 .encode(
-                    color=alt.value("#E6E8E9"),
+                    color=alt.value("#fff"),
                 )
                 .project(
                     type="identity",
@@ -714,28 +724,7 @@ def plot_gdf_alt(
                 )
             )
             chart = alt.layer(background, chart)
-            
-            null_slice =          (
-                alt.Chart(gdf.filter(pl.col('value').fill_nan(None).is_null()))
-                .mark_geoshape(
-                    strokeWidth=0.05,
-                    stroke="darkgrey",
-                )
-                .encode(
-                    tooltip=tooltip,
-                    color="darkgrey",
 
-                )
-                .project(
-                    type="identity",
-                    reflectY=projection != "sagittal",
-                    fit=get_fit(
-                        projection,
-                        is_upright if projection in ("top", "horizontal") else None,
-                    ),
-                )
-            )
-            chart = alt.layer(null_slice, chart)
 
         # add lines (positions aren't correct):
         """
